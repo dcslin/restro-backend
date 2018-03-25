@@ -23,8 +23,8 @@ get '/terminals' => sub {
     my $rows = $dbh->selectall_arrayref($sql, {Slice => {} });
 
     foreach my $terminal ( @{ $rows } ) {
-        my $inventory = _get_trx_aryref_by_term_id( $terminal->{id} );
-        $terminal->{inventory} = $inventory;
+        #my $inventory = _get_trx_aryref_by_term_id( $terminal->{id} );
+        #$terminal->{inventory} = $inventory;
 
         $terminal = _geoloc_modifier($terminal);
     }
@@ -95,8 +95,8 @@ sub _get_terminal_hashref_by_term_id{
 sub _geoloc_modifier{
 
     my $terminal = shift;
-    $terminal->{geoloc}->{lng} = $terminal->{lng};
-    $terminal->{geoloc}->{lat} = $terminal->{lat};
+    $terminal->{geoloc}->{lng} = $terminal->{lng}+0;
+    $terminal->{geoloc}->{lat} = $terminal->{lat}+0;
     delete $terminal->{lng};
     delete $terminal->{lat};
     return $terminal;
