@@ -21,3 +21,20 @@ show_errors: 1
 
 # print the banner
 startup_info: 1
+
+plugins:
+  Database:
+    connections:
+      restro:
+        driver: 'Pg'
+        database: 'restro'
+        host: 'localhost'
+        port: 5432
+        username: 'shicong.lin'
+        password: ''
+        connection_check_threshold: 10
+        dbi_params:
+          RaiseError: 1
+          AutoCommit: 1
+          pg_enable_utf8: 1
+          pg_server_prepare: 0

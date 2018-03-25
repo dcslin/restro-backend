@@ -1,85 +1,122 @@
 package restoBackend;
 use Dancer2;
+use Dancer2::Plugin::Database;
 use Data::Dumper;
 set serializer => 'JSON';
 
 my $terminals;
 
-BEGIN {
-    $terminals = _init_term();
-
-    sub _init_term {
-        return [
-            {
-                id        => '1',
-                inventory => [
-                    { type => 'bulb',           count => '20' },
-                    { type => 'battery',        count => '200' },
-                    { type => 'plastic-bottle', count => '30' }
-                ]
-            },
-            {
-                id        => '2',
-                inventory => [
-                    { type => 'bulb',           count => '15' },
-                    { type => 'battery',        count => '280' },
-                    { type => 'plastic-bottle', count => '90' }
-                ]
-            },
-            {
-                id        => '3',
-                inventory => [
-                    { type => 'bulb',           count => '0' },
-                    { type => 'battery',        count => '110' },
-                    { type => 'plastic-bottle', count => '40' }
-                ]
-            },
-        ];
-    }
-}
-
 our $VERSION = '0.1';
 
-post '/terminal/:id/deposit' => sub {
-    my $id           = route_parameters->get('id');
-    my $deposit_unit = request->data;
-
-    my $terminal = _get_terminal_from_terms( route_parameters->get('id') );
-    send_error( "Not Found", 404 ) unless $terminal;
-
-    foreach my $increment_unit ( @{$deposit_unit} ) {
-        foreach my $inv_unit ( @{ $terminal->{inventory} } ) {
-
-            if ( $inv_unit->{type} eq $increment_unit->{type} ) {
-                info "adding amount: [".$increment_unit->{increment}."] to type [".$inv_unit->{type}."]";
-                $inv_unit->{count} += $increment_unit->{increment};
-                info "new amount: [".$inv_unit->{count}."] for type [".$inv_unit->{type}."]";
-            }
-        }
-    }
-
-    return _get_terminal_from_terms( route_parameters->get('id') );
+hook 'before' => sub {
+    header 'Access-Control-Allow-Origin' => '*';
 };
 
 get '/terminal/:id' => sub {
-    my $terminal = _get_terminal_from_terms( route_parameters->get('id') );
-    send_error( "Not Found", 404 ) unless $terminal;
-    return $terminal;
-
+    return _get_terminal_hashref_by_term_id(route_parameters->get('id'));
 };
+
 
 get '/terminals' => sub {
-    return $terminals;
+    my $dbh = database('restro');
+    my $sql = "select * from terminals";
+    my $rows = $dbh->selectall_arrayref($sql, {Slice => {} });
+
+    foreach my $terminal ( @{ $rows } ) {
+        my $inventory = _get_trx_aryref_by_term_id( $terminal->{id} );
+        $terminal->{inventory} = $inventory;
+
+        $terminal = _geoloc_modifier($terminal);
+    }
+
+    return $rows;
 };
 
-sub _get_terminal_from_terms {
-    my $id = shift;
-    foreach my $terminal ( @{$terminals} ) {
-        if ( $terminal->{id} eq $id ) {
-            return $terminal;
-        }
+post '/terminal/:id/deposit' => sub {
+    my $id           = route_parameters->get('id');
+    my $deposits      = request->data;
+
+    info Dumper $deposits;
+    my $sql = "insert into transactions ( prediction, confirmed, terminal_id, image ) values";
+    foreach my $deposit ( @{ $deposits } ) {
+            my $pre = $deposit->{prediction};
+
+            my $confirm = 'false';
+            $confirm = 'true' if $deposit->{confirmed};
+
+
+            my $img = $deposit->{image};
+            $sql .= "('$pre', $confirm, $id, '$img'),";
     }
-    return undef;
+
+    $sql =~ s/,$//;
+
+    my $dbh = database('restro');
+
+    info Dumper $sql;
+
+    $dbh->do($sql) or return {error_code => 1};
+
+
+
+    return {error_code => 0};
+};
+
+#========================================================
+
+get '/transaction/:id' => sub {
+    return _get_trx_hashref_by_id(route_parameters->get('id'));
+};
+
+get '/transactions/terminal/:terminal_id' => sub {
+    return _get_trx_aryref_by_term_id(route_parameters->get('terminal_id'));
+};
+
+
+
+sub _get_terminal_hashref_by_term_id{
+
+    my $inventory = _get_trx_aryref_by_term_id(route_parameters->get('id'));
+
+    my $dbh = database('restro');
+    my $sql = "select * from terminals where id = ".route_parameters->get('id');
+    my $rows = $dbh->selectall_arrayref($sql, {Slice => {} });
+
+    my $terminal = $$rows[0];
+    $terminal->{inventory} = $inventory;
+
+
+    $terminal = _geoloc_modifier($terminal);
+
+    return $terminal;
+
 }
+
+sub _geoloc_modifier{
+
+    my $terminal = shift;
+    $terminal->{geoloc}->{lng} = $terminal->{lng};
+    $terminal->{geoloc}->{lat} = $terminal->{lat};
+    delete $terminal->{lng};
+    delete $terminal->{lat};
+    return $terminal;
+}
+
+sub _get_trx_hashref_by_id {
+    my $id = shift;
+    my $dbh = database('restro');
+    my $row = $dbh->selectall_arrayref("select * from transactions where id=$id", { Slice => {} });
+    return $$row[0];
+}
+
+sub _get_trx_aryref_by_term_id {
+    my $id = shift;
+    my $dbh = database('restro');
+    my $row = $dbh->selectall_arrayref("select * from transactions where terminal_id=$id", { Slice => {} });
+    info Dumper $row;
+    return $row;
+}
+
+
 
 true;

@@ -11,3 +11,4 @@ on "test" => sub {
 };
 
 requires "Dancer2::Plugin::Database";
+requires "Plack::Builder";
